@@ -1414,6 +1414,60 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 	}
 
 	/**
+	 * Moves a calendar object from calendar to calendar.
+	 *
+	 * @param int $sourceCalendarId
+	 * @param int $targetCalendarId
+	 * @param int $objectId
+	 * @param string $principalUri
+	 * @param int $calendarType
+	 * @return string
+	 */
+	public function moveCalendarObject(int $sourceCalendarId, int $targetCalendarId, int $objectId, string $principalUri, $calendarType = self::CALENDAR_TYPE_CALENDAR) {
+		$object = $this->getCalendarObjectById($principalUri, $objectId);
+
+		$query = $this->db->getQueryBuilder();
+		$query->update('calendarobjects')
+			->set('calendarid', $query->createNamedParameter($targetCalendarId))
+			->where($query->expr()->eq('id', $query->createNamedParameter($objectId)))
+			->andWhere($query->expr()->eq('calendartype', $query->createNamedParameter($calendarType)))
+			->executeStatement();
+
+		$this->purgeProperties($sourceCalendarId, $objectId);
+		$this->updateProperties($targetCalendarId, $object['uri'], $object['calendardata'], $calendarType);
+
+		$this->addChange($sourceCalendarId, $object['uri'], 1, $calendarType);
+		$this->addChange($targetCalendarId, $object['uri'], 3, $calendarType);
+
+		$object = $this->getCalendarObjectById($principalUri, $objectId);
+
+		if (is_array($object)) {
+			if ($calendarType === self::CALENDAR_TYPE_CALENDAR) {
+				$calendarRow = $this->getCalendarById($targetCalendarId);
+				$shares = $this->getShares($targetCalendarId);
+
+				$this->dispatcher->dispatchTyped(new CalendarObjectUpdatedEvent((int)$targetCalendarId, $calendarRow, $shares, $object));
+			} else {
+				$subscriptionRow = $this->getSubscriptionById($targetCalendarId);
+
+				$this->dispatcher->dispatchTyped(new CachedCalendarObjectUpdatedEvent((int)$targetCalendarId, $subscriptionRow, [], $object));
+				$this->legacyDispatcher->dispatch('\OCA\DAV\CalDAV\CalDavBackend::updateCachedCalendarObject', new GenericEvent(
+					'\OCA\DAV\CalDAV\CalDavBackend::updateCachedCalendarObject',
+					[
+						'subscriptionId' => $targetCalendarId,
+						'calendarData' => $subscriptionRow,
+						'shares' => [],
+						'objectData' => $object,
+					]
+				));
+			}
+		}
+
+		return '"' . $object['etag'] . '"';
+	}
+
+
+	/**
 	 * @param int $calendarObjectId
 	 * @param int $classification
 	 */

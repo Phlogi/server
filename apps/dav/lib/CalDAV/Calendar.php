@@ -38,6 +38,8 @@ use OCP\IL10N;
 use Sabre\CalDAV\Backend\BackendInterface;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Exception\NotFound;
+use Sabre\DAV\IMoveTarget;
+use Sabre\DAV\INode;
 use Sabre\DAV\PropPatch;
 
 /**
@@ -46,7 +48,7 @@ use Sabre\DAV\PropPatch;
  * @package OCA\DAV\CalDAV
  * @property CalDavBackend $caldavBackend
  */
-class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable {
+class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable, IMoveTarget {
 
 	/** @var IConfig */
 	private $config;
@@ -421,5 +423,10 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 
 	public function disableTrashbin(): void {
 		$this->useTrashbin = false;
+	}
+
+	public function moveInto($targetName, $sourcePath, INode $sourceNode) {
+		$this->caldavBackend->moveCalendarObject($sourceNode->getCalendarId(), $this->calendarInfo['id'], $sourceNode->getId(), $sourceNode->getPrincipalUri);
+		return true;
 	}
 }
